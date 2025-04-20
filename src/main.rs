@@ -12,6 +12,8 @@ use axum::{
 use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::mpsc;
+use tower_http::trace::TraceLayer;
+use tracing_subscriber::layer::SubscriberExt;
 
 #[derive(Deserialize, Clone)]
 enum AppState {
@@ -20,16 +22,26 @@ enum AppState {
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                format!("{}=debug,tower_http=debug", env!("CARGO_CRATE_NAME")).into()
+            }),
+        )
+        .with(tracing_subscriber::fmt::layer());
+
     let (task_sender, task_recv) = mpsc::channel::<AppState>(10);
     tokio::spawn(background(task_recv));
-
+    let v1_api = Router::new()
+        .route("/status", get(status))
+        .route("/stop/{block_case}", post(stop))
+        .route("/testcases", get(testcases));
     let task_sender = Arc::new(task_sender);
     let app = Router::new()
         .route("/", get(|| async { "hello" }))
-        .route("/status", get(status))
-        .route("/stop/{block_case}", post(stop))
-        .route("/testcases", get(testcases))
-        .with_state(task_sender);
+        .nest("/v1", v1_api)
+        .with_state(task_sender)
+        .layer(TraceLayer::new_for_http());
     let listener = tokio::net::TcpListener::bind("0.0.0.0:40000")
         .await
         .unwrap();

@@ -1,6 +1,6 @@
 @host = localhost
 @port = 40000
-@baseUrl = http://{{host}}:{{port}}
+@baseUrl = http://{{host}}:{{port}}/v1
 
 ### status
 GET {{baseUrl}}/status HTTP/1.1
